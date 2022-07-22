@@ -2,18 +2,15 @@ package kso.repo.search.viewModel
 
 import android.app.Application
 import android.util.Log
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.*
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kso.repo.search.app.CurrentNetworkStatus
 import kso.repo.search.app.NetworkStatusDetector
 import kso.repo.search.app.map
 import kso.repo.search.dataSource.preference.PreferenceProvider
+import kso.repo.search.model.Repo
 import kso.repo.search.model.Resource
 import kso.repo.search.repository.RepoSearchBaseRepository
 import kso.repo.search.ui.state.NetworkConnectionState
@@ -33,20 +30,9 @@ class RepoListPageViewModel @Inject constructor(
 
     private val tag: String = "RepoListPageViewModel"
     private val repoName: String = savedStateHandle.get<String>("repo_name").orEmpty()
-
-    val searchText: MutableStateFlow<String> = MutableStateFlow(repoName)
-
-    private var repoListNBRSharedFlow = MutableSharedFlow<Unit>()
-
-    @Suppress("OPT_IN_IS_NOT_ENABLED")
-    @OptIn(ExperimentalCoroutinesApi::class)
-    var repoListNBR = repoListNBRSharedFlow
-        .map {
-            searchText.value
-        }
-        .flatMapLatest { repository.getRepoListNetworkBoundResource(it)}
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Resource.Start)
-
+    val searchText = MutableLiveData(repoName)
+    private val repoList = MutableLiveData<Resource<List<Repo>>>()
+    val repos: LiveData<Resource<List<Repo>>> get() = repoList
 
     @OptIn(FlowPreview::class)
     val networkState =
@@ -56,8 +42,9 @@ class RepoListPageViewModel @Inject constructor(
                 onUnavailable = { NetworkConnectionState.Error },
             )
 
-    val isRefreshing: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    val showSearchTextEmptyToast: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val isRefreshing = MutableLiveData<Boolean>()
+    val showSearchTextEmptyToast = MutableLiveData<Boolean>()
+    val isConnected = MutableLiveData<Boolean>()
 
     init {
 
@@ -77,23 +64,38 @@ class RepoListPageViewModel @Inject constructor(
         viewModelScope.launch {
             Log.e(tag, "in ViewModelScope")
             Log.e(tag, "preferenceKeyword: ${preferenceProvider.getSearchKeyword()}")
-            if(searchText.value.isEmpty()){
+            if(searchText.value?.isEmpty() == true){
                 showSearchTextEmptyToast.value = true
             }else {
                 showSearchTextEmptyToast.value = false
                 if (preferenceProvider.getSearchKeyword() == searchText.value) {
                     Log.e(tag, "Not Need connection")
-                    repoListNBRSharedFlow.emit(Unit)
+                    repository.getRepoListNetworkBoundResource(searchText.value!!).collect {
+                        repoList.value = it
+                    }
                 } else {
                     if (CurrentNetworkStatus.getNetwork(application.applicationContext)) {
-                        repoListNBRSharedFlow.emit(Unit)
+                        repository.getRepoListNetworkBoundResource(searchText.value!!).collect {
+                            repoList.value = it
+                        }
                     } else {
                         Log.e(tag, "Need connection")
                     }
                 }
             }
 
-
+            networkState.collect{
+                isConnected.value = when (it) {
+                    NetworkConnectionState.Fetched  -> {
+                        Log.e(tag, "Network Status: Fetched")
+                        true
+                    }
+                    else -> {
+                        Log.e(tag, "Network Status: Error")
+                        false
+                    }
+                }
+            }
 
         }
 

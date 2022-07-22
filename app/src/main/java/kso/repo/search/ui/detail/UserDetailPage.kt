@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -35,7 +36,7 @@ fun UserDetailPage(
     userDetailViewModel: UserDetailPageViewModel
 ) {
 
-    val owner by userDetailViewModel.user.collectAsState(initial = Owner())
+    val owner by userDetailViewModel.user.observeAsState(initial = Owner())
     val context = LocalContext.current
 
     Scaffold(topBar = {

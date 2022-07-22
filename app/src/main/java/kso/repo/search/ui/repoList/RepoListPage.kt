@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -59,11 +60,11 @@ fun RepoListPage(
     navHostController: NavHostController,
     repoListPageViewModel: RepoListPageViewModel,
 ) {
-    val searchText by repoListPageViewModel.searchText.collectAsStateLifecycleAware("")
-    val repoListNBR by repoListPageViewModel.repoListNBR.collectAsStateLifecycleAware(Resource.Start)
-    val networkState by repoListPageViewModel.networkState.collectAsStateLifecycleAware(NetworkConnectionState.Error)
-    val isRefreshing by repoListPageViewModel.isRefreshing.collectAsStateLifecycleAware(false)
-    val isShowSearchTextEmptyToast by repoListPageViewModel.showSearchTextEmptyToast.collectAsStateLifecycleAware(false)
+    val searchText: String by repoListPageViewModel.searchText.observeAsState("")
+    val repoListNBR by repoListPageViewModel.repos.observeAsState(Resource.Start)
+    val isConnected by repoListPageViewModel.isConnected.observeAsState(false)
+    val isRefreshing by repoListPageViewModel.isRefreshing.observeAsState(false)
+    val isShowSearchTextEmptyToast by repoListPageViewModel.showSearchTextEmptyToast.observeAsState(false)
 
     val isLoading: Boolean
     var errorMessage = ""
@@ -72,17 +73,6 @@ fun RepoListPage(
     val keyboardController = LocalSoftwareKeyboardController.current
     val needConnectionMessage = stringResource(id = R.string.need_connection_message)
     val keywordEmptyMessage = stringResource(id = R.string.keyword_empty)
-
-    val isConnected: Boolean = when (networkState) {
-        NetworkConnectionState.Fetched -> {
-            Log.e(TAG, "Network Status: Fetched")
-            true
-        }
-        else -> {
-            Log.e(TAG, "Network Status: Error")
-            false
-        }
-    }
 
 
     if(isShowSearchTextEmptyToast){

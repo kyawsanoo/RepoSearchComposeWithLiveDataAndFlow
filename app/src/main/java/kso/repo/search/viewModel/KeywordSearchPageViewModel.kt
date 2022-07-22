@@ -1,13 +1,10 @@
 package kso.repo.search.viewModel
 
 import android.util.Log
-import androidx.lifecycle.SavedStateHandle
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.*
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kso.repo.search.model.Keyword
 import kso.repo.search.model.Resource
 import kso.repo.search.repository.KeywordSearchBaseRepository
 import javax.inject.Inject
@@ -22,17 +19,11 @@ class KeywordSearchPageViewModel @Inject constructor(
     private val tag: String = "KeywordPageViewModel"
     private val repoName: String = savedStateHandle.get<String>("repo").orEmpty()
 
-    val searchText: MutableStateFlow<String> = MutableStateFlow(repoName)
+    val searchText = MutableLiveData(repoName)
 
+    private val keywordList = MutableLiveData<Resource<List<Keyword>>>()
+    val keywords: LiveData<Resource<List<Keyword>>> get() = keywordList
 
-    private val keywordListShareFlow = MutableSharedFlow<Unit>()
-
-    @Suppress("OPT_IN_IS_NOT_ENABLED")
-    @OptIn(ExperimentalCoroutinesApi::class)
-    var keywordListNBR = keywordListShareFlow
-        .map { searchText.value }
-        .flatMapLatest { appRepository.getKeywordListNetworkBoundResource(it)}
-        .stateIn(viewModelScope, SharingStarted.Eagerly, Resource.Loading)
 
     init {
 
@@ -50,7 +41,9 @@ class KeywordSearchPageViewModel @Inject constructor(
 
         viewModelScope.launch {
             Log.e(tag, "in ViewModelScope")
-            keywordListShareFlow.emit(Unit)
+            appRepository.getKeywordListNetworkBoundResource(searchText.value!!).collect {
+                keywordList.value = it
+            }
         }
 
     }

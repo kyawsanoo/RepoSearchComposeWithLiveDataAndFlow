@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -65,7 +66,8 @@ fun ContentView(
     homePageViewModel: HomePageViewModel,
     navHostController: NavHostController
 ){
-    val searchText by homePageViewModel.searchText.collectAsStateLifecycleAware("")
+    val searchText: String by homePageViewModel.searchText.observeAsState("")
+
     val keyboardController = LocalSoftwareKeyboardController.current
     var showClearButton by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -24,7 +25,6 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import kso.repo.search.R
 import kso.repo.search.app.NavPath
-import kso.repo.search.app.collectAsStateLifecycleAware
 import kso.repo.search.model.Keyword
 import kso.repo.search.model.Resource
 import kso.repo.search.viewModel.KeywordSearchPageViewModel
@@ -37,8 +37,8 @@ private const val TAG= "UserSearchPage"
 @Composable
 fun KeywordSearchPage(navHostController: NavHostController, keywordSearchPageViewModel: KeywordSearchPageViewModel) {
 
-    val searchText by keywordSearchPageViewModel.searchText.collectAsStateLifecycleAware(initial = "")
-    val keywordListNBR by keywordSearchPageViewModel.keywordListNBR.collectAsStateLifecycleAware(Resource.Start)
+    val searchText by keywordSearchPageViewModel.searchText.observeAsState(initial = "")
+    val keywordListNBR by keywordSearchPageViewModel.keywords.observeAsState(Resource.Start)
 
     var isLoading = false
     var errorMessage = ""

@@ -1,12 +1,12 @@
 package kso.repo.search.viewModel
 
 import android.util.Log
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kso.repo.search.model.Repo
 import kso.repo.search.model.Resource
@@ -22,9 +22,9 @@ class RepoDetailPageViewModel @Inject constructor(
 
     private val jsonString = savedStateHandle.get<String>("repo")
     private val argRepo = jsonString?.fromJson(Repo::class.java)
-    val repoResource = MutableStateFlow<Resource<Repo>>(Resource.Loading)
+    val repoResource = MutableLiveData<Resource<Repo>>(Resource.Loading)
     private val tag: String = "RepoDetailViewModel"
-    val isRefreshing: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val isRefreshing = MutableLiveData(false)
 
     init {
         repoResource.toJson()?.let { Log.e(tag, "repo:  $it" ) }

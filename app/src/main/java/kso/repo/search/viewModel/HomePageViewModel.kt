@@ -1,6 +1,7 @@
 package kso.repo.search.viewModel
 
 import android.util.Log
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,7 +11,8 @@ import javax.inject.Inject
 class HomePageViewModel @Inject constructor() :  ViewModel() {
 
     private val tag: String = "HomePageViewModel"
-    val searchText: MutableStateFlow<String> = MutableStateFlow("")
+    //val searchText: MutableStateFlow<String> = MutableStateFlow("")
+    val searchText = MutableLiveData<String>("")
 
 
     init {

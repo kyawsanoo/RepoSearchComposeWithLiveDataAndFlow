@@ -1,6 +1,6 @@
 # Github RepoSearch
 ### Using Compose And Flow
-A sample Github RepoSearch app using Android Compose as it's UI, Kotlin StateFlow &amp; SharedFlow as its data flow, Dagger Hilt as it's dependency injection, Room for offline cache and MVVM architect.
+A sample Github RepoSearch app using Android Compose as it's UI, Kotlin Flow as its data asynchronous flow and observe in Compose UIs as LiveData, Dagger Hilt as it's dependency injection, Room for offline cache and MVVM architect.
 #### Key Features
 ****
 The app cover the following features:
@@ -21,11 +21,10 @@ repo search list|keyword suggestion list|repo detail
 ## Architecture
 <img src="images/architecture.png" width="250px" />
 
-## SharedFlow usage in HomePage repo list suggestion
-Call a ViewModel function, and emit to [MutableSharedFlow](https://kotlin.github.io/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-mutable-shared-flow/).
-
-After transformed to hot stream with [ViewModelScope](https://developer.android.com/topic/libraries/architecture/coroutines#viewmodelscope), 
-collect safely it with collectAsStateLifecycleAware in Composable View.
+## Observe Flow as LiveData usage in HomePage repo list suggestion
+Call a ViewModel function, and call to [Kotlin Flow](https://kotlin.github.io/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-mutable-shared-flow/).
+After transformed to LiveData with [ViewModelScope](https://developer.android.com/topic/libraries/architecture/coroutines#viewmodelscope),
+observe safely it with observeAsState in Composable View using [Android LiveData](https://developer.android.com/reference/kotlin/androidx/compose/runtime/livedata/package-summary).
 
 ```kotlin
 @HiltViewModel
@@ -42,20 +41,9 @@ class RepoListPageViewModel @Inject constructor(
 
   private val tag: String = "RepoListPageViewModel"
   private val repoName: String = savedStateHandle.get<String>("repo_name").orEmpty()
-
-  val searchText: MutableStateFlow<String> = MutableStateFlow(repoName)
-
-  private var repoListNBRSharedFlow = MutableSharedFlow<Unit>()
-
-  @Suppress("OPT_IN_IS_NOT_ENABLED")
-  @OptIn(ExperimentalCoroutinesApi::class)
-  var repoListNBR = repoListNBRSharedFlow
-    .map {
-      searchText.value
-    }
-    .flatMapLatest { repository.getRepoListNetworkBoundResource(it)}
-    .stateIn(viewModelScope, SharingStarted.Eagerly, Resource.Start)
-
+  val searchText = MutableLiveData(repoName)
+  private val repoList = MutableLiveData<Resource<List<Repo>>>()
+  val repos: LiveData<Resource<List<Repo>>> get() = repoList
 
   @OptIn(FlowPreview::class)
   val networkState =
@@ -65,8 +53,9 @@ class RepoListPageViewModel @Inject constructor(
         onUnavailable = { NetworkConnectionState.Error },
       )
 
-  val isRefreshing: MutableStateFlow<Boolean> = MutableStateFlow(false)
-  val showSearchTextEmptyToast: MutableStateFlow<Boolean> = MutableStateFlow(false)
+  val isRefreshing = MutableLiveData<Boolean>()
+  val showSearchTextEmptyToast = MutableLiveData<Boolean>()
+  val isConnected = MutableLiveData<Boolean>()
 
   init {
 
@@ -86,23 +75,38 @@ class RepoListPageViewModel @Inject constructor(
     viewModelScope.launch {
       Log.e(tag, "in ViewModelScope")
       Log.e(tag, "preferenceKeyword: ${preferenceProvider.getSearchKeyword()}")
-      if(searchText.value.isEmpty()){
+      if(searchText.value?.isEmpty() == true){
         showSearchTextEmptyToast.value = true
       }else {
         showSearchTextEmptyToast.value = false
         if (preferenceProvider.getSearchKeyword() == searchText.value) {
           Log.e(tag, "Not Need connection")
-          repoListNBRSharedFlow.emit(Unit)
+          repository.getRepoListNetworkBoundResource(searchText.value!!).collect {
+            repoList.value = it
+          }
         } else {
           if (CurrentNetworkStatus.getNetwork(application.applicationContext)) {
-            repoListNBRSharedFlow.emit(Unit)
+            repository.getRepoListNetworkBoundResource(searchText.value!!).collect {
+              repoList.value = it
+            }
           } else {
             Log.e(tag, "Need connection")
           }
         }
       }
 
-
+      networkState.collect{
+        isConnected.value = when (it) {
+          NetworkConnectionState.Fetched  -> {
+            Log.e(tag, "Network Status: Fetched")
+            true
+          }
+          else -> {
+            Log.e(tag, "Network Status: Error")
+            false
+          }
+        }
+      }
 
     }
 
@@ -119,11 +123,11 @@ fun RepoListPage(
   navHostController: NavHostController,
   repoListPageViewModel: RepoListPageViewModel,
 ) {
-  val searchText by repoListPageViewModel.searchText.collectAsStateLifecycleAware("")
-  val repoListNBR by repoListPageViewModel.repoListNBR.collectAsStateLifecycleAware(Resource.Start)
-  val networkState by repoListPageViewModel.networkState.collectAsStateLifecycleAware(NetworkConnectionState.Error)
-  val isRefreshing by repoListPageViewModel.isRefreshing.collectAsStateLifecycleAware(false)
-  val isShowSearchTextEmptyToast by repoListPageViewModel.showSearchTextEmptyToast.collectAsStateLifecycleAware(false)
+  val searchText: String by repoListPageViewModel.searchText.observeAsState("")
+  val repoListNBR by repoListPageViewModel.repos.observeAsState(Resource.Start)
+  val isConnected by repoListPageViewModel.isConnected.observeAsState(false)
+  val isRefreshing by repoListPageViewModel.isRefreshing.observeAsState(false)
+  val isShowSearchTextEmptyToast by repoListPageViewModel.showSearchTextEmptyToast.observeAsState(false)
 
   val isLoading: Boolean
   var errorMessage = ""
@@ -133,16 +137,6 @@ fun RepoListPage(
   val needConnectionMessage = stringResource(id = R.string.need_connection_message)
   val keywordEmptyMessage = stringResource(id = R.string.keyword_empty)
 
-  val isConnected: Boolean = when (networkState) {
-    NetworkConnectionState.Fetched -> {
-      Log.e(TAG, "Network Status: Fetched")
-      true
-    }
-    else -> {
-      Log.e(TAG, "Network Status: Error")
-      false
-    }
-  }
 
   if(isShowSearchTextEmptyToast){
     Toast.makeText(
@@ -171,37 +165,127 @@ fun RepoListPage(
     }
   }
 
+  Scaffold(topBar = {
+    AppBarWithSearchBox(
+      searchText,
+      stringResource(id = R.string.search_repo),
+      onSearchBarClick = {
+        navHostController.navigate(
+          route = NavPath.KeywordSearchPage.route,
+        )
+      },
+      onSearchTextChanged = { repoListPageViewModel.onSearchTextChanged(it) },
+      onClearClick = { repoListPageViewModel.onSearchBoxClear() },
+      onKeyboardSearchTextChanged = {
+        keyboardController?.hide()
+        repoListPageViewModel.onKeyboardSearchClick(searchText)
+      }
+    )
+  }) {
+      paddingValues ->
+    Column(
+      verticalArrangement = Arrangement.spacedBy(10.dp),
+      horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+
+      NetworkAlertScreen(
+        connectionMessage = when (isConnected) {
+          true -> {
+            stringResource(
+              id = R.string.connected
+            )
+          }
+          else -> {
+            stringResource(
+              id = R.string.not_connected
+            )
+          }
+        }
+      )
+      RepoListView(
+        showProgress = isLoading,
+        apiErrorMessage = errorMessage,
+        onRetryClick = {
+          repoListPageViewModel.retry()
+        },
+        modifier = Modifier.padding(paddingValues),
+        isDataNotEmpty = repoList.isNotEmpty(),
+        isConnected = isConnected
+
+      ) {
+
+        SwipeRefresh(
+          state = rememberSwipeRefreshState(isRefreshing),
+          onRefresh = {
+            if(isConnected) {
+              repoListPageViewModel.refresh()
+            }else{
+              Toast.makeText(
+                context,
+                needConnectionMessage,
+                Toast.LENGTH_SHORT
+              ).show()
+            }
+          }
+        ) {
+          LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(5.dp)
+          ) {
+
+            items(items = repoList) { repo ->
+              RepoRow(repo = repo) {
+                val argRepo = repo.toJson()
+                Log.e(TAG, "repo: $argRepo")
+                argRepo?.let {
+                  navHostController.navigate(
+                    route =
+                    "${NavPath.RepoDetailPage.route}?repo=${argRepo}"
+                  )
+                }
+
+              }
+            }
+          }
+
+
+        }
+
+
+
+      }
+
+
+    }
+
+  }
+
+
 }
 
 ```
 
-## SharedFlow usage in KeywordSearchPage keyword list
-Call a ViewModel function, and emit to [MutableSharedFlow](https://kotlin.github.io/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-mutable-shared-flow/).
+## Observe Flow as LiveData usage in KeywordSearchPage keyword list
+Call a ViewModel function, and call to [kotlin flow](https://kotlinlang.org/docs/flow.html).
 
-After transformed to hot stream with [ViewModelScope](https://developer.android.com/topic/libraries/architecture/coroutines#viewmodelscope),
-collect safely it with collectAsStateLifecycleAware in Composable View.
+After transformed to LiveData with [ViewModelScope](https://developer.android.com/topic/libraries/architecture/coroutines#viewmodelscope),
+observe safely it with observeAsState in Composable View.
 
 ```kotlin
 @HiltViewModel
 class KeywordSearchPageViewModel @Inject constructor(
-  private val appRepository: AppRepository,
+  private val appRepository: KeywordSearchBaseRepository,
   savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
   private val tag: String = "KeywordPageViewModel"
   private val repoName: String = savedStateHandle.get<String>("repo").orEmpty()
 
-  val searchText: MutableStateFlow<String> = MutableStateFlow(repoName)
+  val searchText = MutableLiveData(repoName)
 
+  private val keywordList = MutableLiveData<Resource<List<Keyword>>>()
+  val keywords: LiveData<Resource<List<Keyword>>> get() = keywordList
 
-  private val keywordListShareFlow = MutableSharedFlow<Unit>()
-
-  @Suppress("OPT_IN_IS_NOT_ENABLED")
-  @OptIn(ExperimentalCoroutinesApi::class)
-  var keywordListNBR = keywordListShareFlow
-    .map { searchText.value }
-    .flatMapLatest { appRepository.getKeywordListNetworkBoundResource(it) }
-    .stateIn(viewModelScope, SharingStarted.Eagerly, Resource.Loading)
 
   init {
 
@@ -212,17 +296,32 @@ class KeywordSearchPageViewModel @Inject constructor(
     submit()
 
   }
+
+
+  private fun submit() {
+    Log.e(tag, "fetchAllKeywordList()")
+
+    viewModelScope.launch {
+      Log.e(tag, "in ViewModelScope")
+      appRepository.getKeywordListNetworkBoundResource(searchText.value!!).collect {
+        keywordList.value = it
+      }
+    }
+
+  }
 }
 
 
 ```
 ```kotlin
 
+@ExperimentalComposeUiApi
+@ExperimentalAnimationApi
 @Composable
 fun KeywordSearchPage(navHostController: NavHostController, keywordSearchPageViewModel: KeywordSearchPageViewModel) {
 
-  val searchText by keywordSearchPageViewModel.searchText.collectAsStateLifecycleAware(initial = "")
-  val keywordListNBR by keywordSearchPageViewModel.keywordListNBR.collectAsStateLifecycleAware()
+  val searchText by keywordSearchPageViewModel.searchText.observeAsState(initial = "")
+  val keywordListNBR by keywordSearchPageViewModel.keywords.observeAsState(Resource.Start)
 
   var isLoading = false
   var errorMessage = ""
@@ -241,7 +340,7 @@ fun KeywordSearchPage(navHostController: NavHostController, keywordSearchPageVie
     else -> {
       Log.e(TAG, "keywordListNBR Success")
       keywordList = keywordListNBR.data.orEmpty()
-      when (keywordListNBR.data.isNullOrEmpty()) {
+      when(keywordListNBR.data.isNullOrEmpty()){
         true -> Log.e(TAG, "keyword list : NullOrEmpty")
         else -> {
           Log.e(TAG, "first keyword : ${keywordList.first().name}")
@@ -251,9 +350,51 @@ fun KeywordSearchPage(navHostController: NavHostController, keywordSearchPageVie
 
     }
   }
-}
 
+  Log.e(TAG, "searchText: $searchText")
+
+  KeywordSearchBoxView(
+    searchText = searchText,
+    placeholderText = stringResource(R.string.search_keyword),
+    onSearchTextChanged = { keywordSearchPageViewModel.onSearchTextChanged(it) },
+    onClearClick = { keywordSearchPageViewModel.onSearchBoxClear() },
+    onNavigateBack = {
+      Log.e(TAG, "onNavigateBack")
+      navHostController.popBackStack()
+    },
+    showProgress = isLoading,
+    errorMessage = errorMessage,
+    matchesFound = keywordList.isNotEmpty(),
+    onRetryClick = {
+      keywordSearchPageViewModel.retry()
+    },
+    onKeywordClick = {
+      navHostController.navigate(
+        route = "${NavPath.RepoListPage.route}?repoName=$searchText"
+      )
+    }
+  ) {
+    LazyColumn(
+      modifier = Modifier.fillMaxWidth(),
+      contentPadding = PaddingValues(5.dp)
+    ) {
+
+      items(items = keywordList) { keyword ->
+        KeywordRow(keyword = keyword) {
+          val argRepoName = keyword.name
+          Log.e(TAG, "Route: ${NavPath.RepoListPage.route}?repoName=$argRepoName")
+          navHostController.navigate(
+            route = "${NavPath.RepoListPage.route}?repoName=${argRepoName}"
+          )
+        }
+      }
+    }
+  }
+
+
+}
 ```
+
 ## Using Room and Network Bound Resource for offline cache 
 Use Room database for offline storage and cache [Room](https://developer.android.com/training/data-storage/room/accessing-data) 
 
@@ -354,6 +495,7 @@ interface RepoDao {
   abstract fun upsertRepo(vararg repo: Repo)
 }
 
+
 ```
 ### Owner Table Dao
 ```kotlin
@@ -439,12 +581,8 @@ class RepoSearchRepository @Inject constructor(
 * [hilt](https://dagger.dev/hilt/)
 
 ### Reference Articles
-  * [stateflow-vs-sharedflow_1](https://medium.com/androiddevelopers/a-safer-way-to-collect-flows-from-android-uis-23080b1f8bda)
-  * [stateflow-vs-sharedflow_2](https://www.valueof.io/blog/stateflow-vs-sharedflow-jetpack-compose)
-  * [stateflow-transformations](https://proandroiddev.com/clean-stateflow-transformations-in-kotlin-608f4c7de5ab)
-  * [lifecycle aware viewmodel 1](https://betterprogramming.pub/empowered-lifecycle-aware-viewmodel-for-android-f495de9a8170)
-  * [lifecycle aware viewmodel 2](https://betterprogramming.pub/jetpack-compose-with-lifecycle-aware-composables-7bd5d6793e0)
-  * [lifecycle aware viewmodel 3](https://proandroiddev.com/how-to-collect-flows-lifecycle-aware-in-jetpack-compose-babd53582d0b)
+  * [kotlin flow](https://kotlinlang.org/docs/flow.html)
+  * [Android LiveData](https://developer.android.com/reference/kotlin/androidx/compose/runtime/livedata/package-summary)
   * [network_bound_resource](https://medium.com/androiddevelopers/a-safer-way-to-collect-flows-from-android-uis-23080b1f8bda)
   
 #### Serve me a coffee and my ethereum wallet is

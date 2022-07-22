@@ -1,6 +1,7 @@
 package kso.repo.search.viewModel
 
 import android.util.Log
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.google.gson.Gson
@@ -17,7 +18,7 @@ class UserDetailPageViewModel @Inject constructor(
 
     private val jsonString = savedStateHandle.get<String>("user")
     private val argOwner = jsonString?.fromJson(Owner::class.java)
-    val user = MutableStateFlow(argOwner)
+    val user = MutableLiveData(argOwner)
     private val tag: String = "UserDetailViewModel"
 
     init {

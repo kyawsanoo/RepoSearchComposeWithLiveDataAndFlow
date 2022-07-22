@@ -12,8 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,7 +32,6 @@ import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import com.google.gson.Gson
 import kso.repo.search.R
 import kso.repo.search.app.NavPath
-import kso.repo.search.app.collectAsStateLifecycleAware
 import kso.repo.search.model.Repo
 import kso.repo.search.model.Resource
 import kso.repo.search.ui.common.ErrorScreen
@@ -49,8 +48,8 @@ fun RepoDetailPage(
     repoDetailViewModel: RepoDetailPageViewModel,
 ) {
 
-    val repoResource by repoDetailViewModel.repoResource.collectAsState(initial = Resource.Loading)
-    val isRefreshing by repoDetailViewModel.isRefreshing.collectAsStateLifecycleAware(false)
+    val repoResource by repoDetailViewModel.repoResource.observeAsState(initial = Resource.Loading)
+    val isRefreshing by repoDetailViewModel.isRefreshing.observeAsState(false)
     val context = LocalContext.current
     var isLoading = false
     var errorMessage = ""
